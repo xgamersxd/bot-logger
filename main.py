@@ -11,18 +11,15 @@ log_pattern = re.compile(r'" (\d{3}) ')
 # Путь к файлу лога Nginx на Windows
 nginx_log_path = "D:\\nginx-1.24.0\\logs\\access.log"
 
+# URL Telegraf для приема метрик
+telegraf_url = "http://localhost:8186/write?db=nginx"
+
 # Переменная для хранения последней позиции в файле
 last_position = 0
 
 # Токен и chat_id телеграм-бота
 TOKEN = "5611986812:AAHNOJBAXn34rMA83sPi0Cgh5dPKgzSRLOY"
 chat_id = "-1002108620285"
-
-# Функция для отправки сообщения в телеграм
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    params = {"chat_id": chat_id, "text": message}
-    requests.post(url, params=params)
 
 # Функция для парсинга строки лога и извлечения кода ответа
 def parse_log_line(line):
@@ -31,6 +28,21 @@ def parse_log_line(line):
         return match.group(1)
     else:
         return None
+
+# Функция для отправки метрик в Telegraf
+def send_metric_to_telegraf(response_code):
+    metric_data = f'nginx_response_code value={response_code}'
+    response = requests.post(telegraf_url, data=metric_data)
+    if response.status_code == 204:
+        print(f"Metric sent successfully: nginx_response_code={response_code}")
+    else:
+        print("Failed to send metric to Telegraf")
+
+# Функция для отправки сообщения в телеграм
+def send_telegram_message(message):
+    url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+    params = {"chat_id": chat_id, "text": message}
+    requests.post(url, params=params)
 
 # Функция для обработки новых строк в логе
 def handle_new_log_entry():
@@ -51,7 +63,9 @@ def handle_new_log_entry():
         for line in new_data.split('\n'):
             response_code = parse_log_line(line)
             if response_code:
-                # Отправляем код ответа в телеграм
+                # Отправляем код ответа в Telegraf
+                send_metric_to_telegraf(response_code)
+                # Отправляем сообщение в телеграм
                 send_telegram_message(f"Received response code: {response_code}")
 
     observer.stop()
